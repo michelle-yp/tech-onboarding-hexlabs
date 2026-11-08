@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { MongoServerError, ObjectId } from "mongodb";
 import { collections, type Assignment } from "./db.js";
 
 export type AssignResult =
@@ -34,6 +34,13 @@ export async function assignNext(judgeId: string): Promise<AssignResult> {
   const projectId = best[Math.floor(Math.random() * best.length)]._id;
 
   const assignment: Assignment = { _id: new ObjectId(), judgeId, projectId, status: "QUEUED", createdAt: new Date() };
-  await assignments.insertOne(assignment);
+  try {
+    await assignments.insertOne(assignment);
+  } catch (err) {
+    if (!(err instanceof MongoServerError) || err.code !== 11000) throw err;
+    // A concurrent request won: either this judge just got a project, or someone took ours.
+    if (!("projectId" in (err.keyPattern ?? {}))) return { kind: "judge-busy" };
+    return assignNext(judgeId);
+  }
   return { kind: "assigned", assignment };
 }

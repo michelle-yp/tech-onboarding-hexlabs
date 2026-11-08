@@ -30,6 +30,13 @@ export async function startDb(): Promise<Db> {
   server = await MongoMemoryServer.create();
   client = await MongoClient.connect(server.getUri());
   db = client.db("expo");
+  // Unique indexes let MongoDB enforce the assignment rules even when requests overlap.
+  const queued = { partialFilterExpression: { status: "QUEUED" } };
+  await db.collection("assignments").createIndexes([
+    { key: { judgeId: 1, projectId: 1 }, unique: true }, // never the same project twice
+    { key: { projectId: 1 }, unique: true, ...queued }, // one active judge per project
+    { key: { judgeId: 1 }, unique: true, ...queued }, // one active project per judge
+  ]);
   return db;
 }
 
